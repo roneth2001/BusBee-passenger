@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 
 class BusBeeSignUpScreen extends StatefulWidget {
@@ -35,8 +36,7 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
     super.dispose();
   }
 
-  // (Optional) Hash password – you're already using Firebase Auth (which hashes),
-  // but keeping this since you had it in your DB. Consider removing for security best-practices.
+  // Optional (Firebase already hashes passwords)
   String _hashPassword(String password) {
     final bytes = utf8.encode(password);
     final digest = sha256.convert(bytes);
@@ -112,7 +112,7 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const BusBeeMenuScreen()),
-            (_) => false,
+        (_) => false,
       );
     } on FirebaseAuthException catch (e) {
       _showErrorSnackBar(_getAuthErrorMessage(e.code));
@@ -148,7 +148,6 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
     );
   }
 
-  // Validators styled like your sample UI
   String? _validateName(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your full name';
     if (value.trim().length < 2) return 'Name must be at least 2 characters';
@@ -166,6 +165,26 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
     if (value == null || value.isEmpty) return 'Please enter a password';
     if (value.length < 6) return 'Password must be at least 6 characters';
     return null;
+  }
+
+  // 🔗 Footer link
+  Future<void> _launchWebsite() async {
+    try {
+      final Uri url = Uri.parse('https://gwtechnologiez.com');
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open website. Please try again later.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -542,20 +561,20 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
                               ),
                               child: _isLoading
                                   ? SizedBox(
-                                height: isSmallScreen ? 18 : 20,
-                                width: isSmallScreen ? 18 : 20,
-                                child: const CircularProgressIndicator(
-                                  color: Colors.black,
-                                  strokeWidth: 2,
-                                ),
-                              )
+                                      height: isSmallScreen ? 18 : 20,
+                                      width: isSmallScreen ? 18 : 20,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.black,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
                                   : Text(
-                                'Create Account',
-                                style: TextStyle(
-                                  fontSize: isTablet ? 20 : 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                                      'Create Account',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 20 : 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                             ),
                           ),
 
@@ -591,6 +610,54 @@ class _BusBeeSignUpScreenState extends State<BusBeeSignUpScreen> {
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+
+      // 🔻 Footer pinned at bottom
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                spreadRadius: 2,
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Powered by ',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              GestureDetector(
+                onTap: _launchWebsite,
+                child: Text(
+                  'GW Technology',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
               ),

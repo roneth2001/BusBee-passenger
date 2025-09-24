@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
 }
 
 class _AuthGate extends StatelessWidget {
-  const _AuthGate({super.key});
+  const _AuthGate();
 
   @override
   Widget build(BuildContext context) {

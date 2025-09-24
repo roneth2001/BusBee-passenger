@@ -3,11 +3,11 @@ import 'package:busbee_passenger/screens/welcomePage.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 // If you use an AuthGate as home, you can just signOut() and not navigate.
 // If you want to navigate explicitly after logout, import your login screen:
-import 'login.dart'; // <-- change to your actual path/file if needed
+// <-- change to your actual path/file if needed
 
 class BusBeeMenuScreen extends StatelessWidget {
   const BusBeeMenuScreen({Key? key}) : super(key: key);
@@ -42,11 +42,11 @@ class BusBeeMenuScreen extends StatelessWidget {
         final dn = user?.displayName?.trim();
         if (dn != null && dn.isNotEmpty) fallback = dn;
 
-        // Try phone (if you later add phone auth)
+        // Try phone
         final phone = user?.phoneNumber?.trim();
         if (phone != null && phone.isNotEmpty) fallback = phone;
 
-        // Try email (in your case it's phone@busbee.com)
+        // Try email
         final email = user?.email?.trim();
         if (email != null && email.isNotEmpty) fallback = email;
 
@@ -56,7 +56,7 @@ class BusBeeMenuScreen extends StatelessWidget {
             ? nameFromFirestore
             : fallback;
 
-        // If you want only first name:
+        // Only first name
         final first = greetingName.split(' ').first;
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -82,39 +82,18 @@ class BusBeeMenuScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmLogout(BuildContext context) async {
-    await showDialog(
-      context: context,
-      builder: (BuildContext ctx) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(ctx); // close dialog first
-                await FirebaseAuth.instance.signOut();
 
-                if (!context.mounted) return;
-
-                // If you use an AuthGate as app home, you can just pop to root.
-                // Otherwise, navigate explicitly to login screen:
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const BusBeeLoginScreen()),
-                      (_) => false,
-                );
-              },
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
-    );
+  Future<void> _launchWebsite() async {
+    try {
+      final Uri url = Uri.parse('https://gwtechnologiez.com');
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url);
+      }
+    } catch (_) {
+      // You can show a snackbar via a passed BuildContext if needed
+    }
   }
 
   @override
@@ -129,10 +108,7 @@ class BusBeeMenuScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 40),
 
-              // Bus illustration placeholder
-
-
-              const SizedBox(height: 60),
+              // (You can put an illustration here)
 
               // 👇 Dynamic greeting from Firestore/Auth
               _greeting(),
@@ -183,12 +159,10 @@ class BusBeeMenuScreen extends StatelessWidget {
                       icon: Icons.directions_bus,
                       text: 'See Your Bus',
                       onTap: () {
-                        // TODO: Navigate to bus tracking screen
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const BusBeeRouteSearchScreen()),
                         );
-                        debugPrint('See Your Bus tapped');
                       },
                     ),
                     const SizedBox(height: 20),
@@ -199,7 +173,6 @@ class BusBeeMenuScreen extends StatelessWidget {
                       showBadge: true,
                       onTap: () {
                         // TODO: Navigate to notifications screen
-                        debugPrint('Notifications tapped');
                       },
                     ),
                     const SizedBox(height: 20),
@@ -209,7 +182,6 @@ class BusBeeMenuScreen extends StatelessWidget {
                       text: 'Settings',
                       onTap: () {
                         // TODO: Navigate to settings screen
-                        debugPrint('Settings tapped');
                       },
                     ),
                   ],
@@ -218,51 +190,49 @@ class BusBeeMenuScreen extends StatelessWidget {
 
               const Spacer(),
 
-        // Logout button
-        Center(
-          child: SizedBox(
-          width: 200,
-          child: ElevatedButton(
-            onPressed: () async {
-              // 1. Sign out
-              await FirebaseAuth.instance.signOut();
+              // Logout button
+              Center(
+                child: SizedBox(
+                  width: 200,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      // 1. Sign out
+                      await FirebaseAuth.instance.signOut();
 
-              // 2. Navigate to WelcomePage and clear history
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const BusBeeWelcomeScreen()),
-                    (route) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
+                      // 2. Navigate to WelcomePage and clear history
+                      if (!context.mounted) return;
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BusBeeWelcomeScreen()),
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      elevation: 5,
+                    ),
+                    child: const Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              elevation: 5,
-            ),
-            child: const Text(
-              'Logout',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
 
-
-      const SizedBox(height: 40),
+              const SizedBox(height: 40),
 
               // BusBee logo
               Center(
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
                   decoration: BoxDecoration(
                     color: const Color(0xFF2C2C2C),
                     borderRadius: BorderRadius.circular(15),
@@ -293,6 +263,54 @@ class BusBeeMenuScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+
+      // 🔻 Footer pinned to bottom of the screen
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                spreadRadius: 2,
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Powered by ',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              GestureDetector(
+                onTap: _launchWebsite,
+                child: Text(
+                  'GW Technology',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
               ),

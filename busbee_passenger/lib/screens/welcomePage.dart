@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'login.dart';
 
 class BusBeeWelcomeScreen extends StatelessWidget {
   const BusBeeWelcomeScreen({Key? key}) : super(key: key);
 
+  Future<void> _launchWebsite() async {
+    try {
+      final Uri url = Uri.parse('https://gwtechnologiez.com');
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url);
+      }
+    } catch (_) {
+      // Optionally show a snackbar if you convert to StatefulWidget and use context
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final h = MediaQuery.of(context).size.height;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
@@ -17,7 +33,7 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               top: 0,
               left: 0,
               right: 0,
-              height: MediaQuery.of(context).size.height * 0.6,
+              height: h * 0.6,
               child: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -50,8 +66,6 @@ class BusBeeWelcomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Top right person illustration placeholder
 
             // Main welcome card
             Center(
@@ -101,7 +115,6 @@ class BusBeeWelcomeScreen extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Bus icon placeholder
                           Container(
                             width: 40,
                             height: 40,
@@ -125,7 +138,6 @@ class BusBeeWelcomeScreen extends StatelessWidget {
                             ),
                           ),
                         ],
-
                       ),
                     ),
                   ],
@@ -133,19 +145,12 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               ),
             ),
 
-            // Bottom left people illustration placeholder
-
-
-            // Bottom left bus illustration placeholder
-
-
             // Bottom right arrow button
             Positioned(
-              bottom: 40,
+              bottom: 100, // lifted a bit so it doesn't overlap the footer
               right: 40,
               child: FloatingActionButton(
                 onPressed: () {
-                  // Handle navigation to login screen
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const BusBeeLoginScreen()),
@@ -160,6 +165,54 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+
+      // 🔻 Footer pinned to bottom of the screen
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                spreadRadius: 2,
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Powered by ',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              GestureDetector(
+                onTap: _launchWebsite,
+                child: Text(
+                  'GW Technology',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

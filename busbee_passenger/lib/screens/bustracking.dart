@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart'; // optional for call driver
+import 'package:firebase_database/firebase_database.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 
 class BusBeeTrackingScreen extends StatefulWidget {
@@ -17,10 +17,11 @@ class BusBeeTrackingScreen extends StatefulWidget {
 }
 
 class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseDatabase _database = FirebaseDatabase.instance;
 
   GoogleMapController? _mapController;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _busSub;
+  StreamSubscription<DatabaseEvent>? _busSub;
+  Timer? _refreshTimer;
 
   // Live values
   LatLng? _busLocation;           // null until first snapshot
@@ -30,6 +31,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
   int? _availableSeats;           // seats left (optional)
   String? _driverPhone;           // for call driver (optional)
   String? _nextStopName;          // show stop name if you have it (optional)
+  bool _isOnline = false;         // bus online status
 
   Set<Marker> _markers = <Marker>{};
 
@@ -37,6 +39,29 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
   void initState() {
     super.initState();
     _listenToBusDoc();
+    _startPeriodicRefresh();
+  }
+
+  void _startPeriodicRefresh() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        _refreshBusData();
+      }
+    });
+  }
+
+  void _refreshBusData() {
+    final busId = (widget.busInfo['id'] ?? '').toString();
+    if (busId.isEmpty) return;
+
+    // Force a one-time read to refresh data
+    _database.ref('buses/$busId').once().then((DatabaseEvent event) {
+      if (event.snapshot.exists) {
+        _processBusData(event.snapshot);
+      }
+    }).catchError((error) {
+      debugPrint('[BusBee] Refresh error: $error');
+    });
   }
 
   void _listenToBusDoc() {
@@ -46,65 +71,93 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
       return;
     }
 
-    _busSub = _firestore.collection('buses').doc(busId).snapshots().listen((doc) {
-      if (!doc.exists) {
+    _busSub = _database.ref('buses/$busId').onValue.listen((DatabaseEvent event) {
+      if (!event.snapshot.exists) {
         debugPrint('[BusBee] buses/$busId not found');
         return;
       }
-      final data = doc.data();
-      if (data == null) return;
-
-      final loc = data['currentLocation'];
-      if (loc is! GeoPoint) {
-        debugPrint('[BusBee] currentLocation is not a GeoPoint');
-        return;
-      }
-
-      // read optional fields if present
-      _busSpeed        = (data['speedKmh'] as num?)?.toDouble() ?? _busSpeed;
-      _busStatus       = (data['status'] as String?) ?? _busStatus;
-      _nextStopEtaMin  = (data['nextStopEtaMin'] as num?)?.toInt() ?? _nextStopEtaMin;
-      _availableSeats  = (data['availableSeats'] as num?)?.toInt() ?? _availableSeats;
-      _driverPhone     = (data['driverPhone'] as String?) ?? _driverPhone;
-      _nextStopName    = (data['nextStopName'] as String?) ?? _nextStopName;
-
-      final newPos = LatLng(loc.latitude, loc.longitude);
-
-      if (!mounted) return;
-      setState(() {
-        _busLocation = newPos;
-        _markers = {
-          Marker(
-            markerId: const MarkerId('bus'),
-            position: newPos,
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-            infoWindow: InfoWindow(
-              title: widget.busInfo['busNumber'] ?? 'Bus',
-              snippet: _busSpeed > 0 ? 'Speed: ${_busSpeed.toStringAsFixed(0)} km/h' : null,
-            ),
-          ),
-        };
-      });
-
-      // keep camera on the bus
-      if (_mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(newPos, 15),
-        );
-      }
-    }, onError: (e) {
-      debugPrint('[BusBee] Firestore error: $e');
+      
+      _processBusData(event.snapshot);
+    }, onError: (error) {
+      debugPrint('[BusBee] Realtime Database error: $error');
     });
+  }
+
+  void _processBusData(DataSnapshot snapshot) {
+    final data = snapshot.value as Map<dynamic, dynamic>?;
+    if (data == null) return;
+
+    // Extract location from your database structure
+    final latitude = data['latitude'] as num?;
+    final longitude = data['longitude'] as num?;
+    
+    if (latitude == null || longitude == null) {
+      debugPrint('[BusBee] latitude or longitude missing');
+      return;
+    }
+
+    // Read other optional fields if present
+    _busSpeed = (data['speedKmh'] as num?)?.toDouble() ?? _busSpeed;
+    _busStatus = (data['status'] as String?) ?? _busStatus;
+    _nextStopEtaMin = (data['nextStopEtaMin'] as num?)?.toInt() ?? _nextStopEtaMin;
+    _availableSeats = (data['availableSeats'] as num?)?.toInt() ?? _availableSeats;
+    _driverPhone = (data['driverPhone'] as String?) ?? _driverPhone;
+    _nextStopName = (data['nextStopName'] as String?) ?? _nextStopName;
+    _isOnline = (data['isOnline'] as bool?) ?? true;
+
+    // Get route name from your data structure
+    final routeName = data['routeName'] as String?;
+    if (routeName != null && widget.busInfo['routeName'] == null) {
+      widget.busInfo['routeName'] = routeName;
+    }
+
+    // Get owner/operator name
+    final ownerNumber = data['ownerNumber'] as String?;
+    if (ownerNumber != null && widget.busInfo['operatorName'] == null) {
+      widget.busInfo['operatorName'] = ownerNumber;
+    }
+
+    final newPos = LatLng(latitude.toDouble(), longitude.toDouble());
+
+    if (!mounted) return;
+    setState(() {
+      _busLocation = newPos;
+      _markers = {
+        Marker(
+          markerId: const MarkerId('bus'),
+          position: newPos,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            _isOnline ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueRed
+          ),
+          infoWindow: InfoWindow(
+            title: widget.busInfo['busNumber'] ?? data['busNumber'] ?? 'Bus',
+            snippet: _busSpeed > 0 
+                ? 'Speed: ${_busSpeed.toStringAsFixed(0)} km/h ${_isOnline ? "• Online" : "• Offline"}'
+                : (_isOnline ? 'Online' : 'Offline'),
+          ),
+        ),
+      };
+    });
+
+    // keep camera on the bus (only if it's a significant location change)
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(newPos, 15),
+      );
+    }
   }
 
   @override
   void dispose() {
     _busSub?.cancel();
+    _refreshTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
 
   Color _statusColor() {
+    if (!_isOnline) return Colors.red;
+    
     switch (_busStatus) {
       case 'On Route':
         return Colors.green;
@@ -115,6 +168,11 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  String _getStatusText() {
+    if (!_isOnline) return 'Offline';
+    return _busStatus;
   }
 
   void _onMapCreated(GoogleMapController controller) {
@@ -143,7 +201,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
         await launchUrl(uri);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Can’t start a call to $phone')),
+          SnackBar(content: Text("Can t start a call to $phone")),
         );
       }
     } catch (_) {
@@ -195,7 +253,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
                           ),
                         ),
                         Text(
-                          widget.busInfo['operatorName'] ?? 'Live Location',
+                          widget.busInfo['operatorName'] ?? widget.busInfo['routeName'] ?? 'Live Location',
                           style: TextStyle(
                             fontSize: isTablet ? 14 : isSmall ? 12 : 13,
                             color: Colors.grey[600],
@@ -217,7 +275,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
                         Container(width: isSmall ? 6 : 8, height: isSmall ? 6 : 8, decoration: BoxDecoration(color: _statusColor(), shape: BoxShape.circle)),
                         SizedBox(width: isSmall ? 4 : 6),
                         Text(
-                          _busStatus,
+                          _getStatusText(),
                           style: TextStyle(
                             fontSize: isTablet ? 12 : isSmall ? 10 : 11,
                             fontWeight: FontWeight.w600,
@@ -242,7 +300,16 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: _busLocation == null
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('Loading bus location...'),
+                            ],
+                          ),
+                        )
                       : GoogleMap(
                     onMapCreated: _onMapCreated,
                     initialCameraPosition: CameraPosition(target: _busLocation!, zoom: 14),

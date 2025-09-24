@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'bustracking.dart';
 
@@ -11,6 +12,7 @@ class BusBeeResultsScreen extends StatefulWidget {
     Key? key,
     required this.fromLocation,
     required this.toLocation,
+    required List<Map<String, dynamic>> buses,
   }) : super(key: key);
 
   @override
@@ -18,7 +20,7 @@ class BusBeeResultsScreen extends StatefulWidget {
 }
 
 class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref();
   List<Map<String, dynamic>> _buses = [];
   bool _isLoading = true;
   String _sortBy = 'departureTime'; // departureTime, price, duration
@@ -33,28 +35,46 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Query all buses from the collection
-      final busQuery = await _firestore.collection('buses').get();
+      // Query all buses from the realtime database
+      final DatabaseEvent event = await _databaseRef.child('buses').once();
+      final DataSnapshot snapshot = event.snapshot;
+
+      if (!snapshot.exists) {
+        setState(() {
+          _buses = [];
+          _isLoading = false;
+        });
+        return;
+      }
 
       List<Map<String, dynamic>> matchingBuses = [];
+      final Map<Object?, Object?> busesData = snapshot.value as Map<Object?, Object?>;
 
-      for (var busDoc in busQuery.docs) {
-        final busData = busDoc.data();
-        final List<dynamic> route = busData['route'] ?? [];
+      busesData.forEach((busId, busDataObj) {
+        final Map<String, dynamic> busData = Map<String, dynamic>.from(busDataObj as Map);
+        
+        // Only include buses that are online
+        if (busData['isOnline'] != true) {
+          return;
+        }
 
-        // Check if route contains both from and to locations
+        // Get destinations array
+        final List<dynamic> destinations = busData['destinations'] ?? [];
+        
+        // Check if destinations contain both from and to locations
         int fromIndex = -1;
         int toIndex = -1;
 
-        for (int i = 0; i < route.length; i++) {
-          final stopLocation = route[i].toString().toLowerCase();
+        for (int i = 0; i < destinations.length; i++) {
+          final destination = destinations[i].toString().toLowerCase().trim();
+          final fromLocation = widget.fromLocation.toLowerCase().trim();
+          final toLocation = widget.toLocation.toLowerCase().trim();
 
-          if (stopLocation.contains(widget.fromLocation.toLowerCase()) ||
-              widget.fromLocation.toLowerCase().contains(stopLocation)) {
+          // Check for exact match or partial match
+          if (destination.contains(fromLocation) || fromLocation.contains(destination)) {
             fromIndex = i;
           }
-          if (stopLocation.contains(widget.toLocation.toLowerCase()) ||
-              widget.toLocation.toLowerCase().contains(stopLocation)) {
+          if (destination.contains(toLocation) || toLocation.contains(destination)) {
             toIndex = i;
           }
         }
@@ -76,18 +96,24 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
           final price = (basePrice * distance).round();
 
           matchingBuses.add({
-            'id': busDoc.id,
-            'busNumber': busData['number'] ?? '',
-            'operatorName': busData['ownerName'] ?? 'Unknown Operator',
-            'route': busData['routeName'] ?? '',
+            'id': busId.toString(),
+            'busNumber': busData['busNumber'] ?? busData['number'] ?? '',
+            'operatorName': busData['ownerNumber'] ?? busData['ownerName'] ?? 'Unknown Operator',
+            'route': busData['routeName'] ?? 'Unknown Route',
             'departureTime': departureTime,
             'arrivalTime': arrivalTime,
             'duration': duration,
-            'fromStop': route[fromIndex].toString(),
-            'toStop': route[toIndex].toString(),
+            'price': price,
+            'fromStop': destinations[fromIndex].toString(),
+            'toStop': destinations[toIndex].toString(),
+            'currentLocation': busData['currentLocation'] ?? 'Location not available',
+            'latitude': busData['latitude'],
+            'longitude': busData['longitude'],
+            'lastLocationUpdate': busData['lastLocationUpdate'],
+            'isOnline': busData['isOnline'],
           });
         }
-      }
+      });
 
       // Sort buses
       _sortBuses(matchingBuses);
@@ -110,28 +136,8 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
   }
 
   // Helper methods to generate bus details
-  String _getBusTypeFromRoute(String routeName) {
-    if (routeName.toLowerCase().contains('express')) return 'Express';
-    if (routeName.toLowerCase().contains('luxury')) return 'Luxury';
-    if (routeName.toLowerCase().contains('ac')) return 'AC';
-    return 'Regular';
-  }
+ 
 
-  int _generateAvailableSeats() {
-    final random = DateTime.now().millisecondsSinceEpoch % 45;
-    return 10 + random; // Between 10-54 seats
-  }
-
-  List<String> _generateAmenities() {
-    final allAmenities = ['AC', 'WiFi', 'Charging Port', 'TV', 'Reclining Seats', 'Water'];
-    final count = (DateTime.now().millisecondsSinceEpoch % 4) + 1; // 1-4 amenities
-    return allAmenities.take(count).toList();
-  }
-
-  double _generateRating() {
-    final rating = 3.5 + ((DateTime.now().millisecondsSinceEpoch % 15) / 10);
-    return double.parse(rating.toStringAsFixed(1));
-  }
 
   void _sortBuses(List<Map<String, dynamic>> buses) {
     buses.sort((a, b) {
@@ -147,12 +153,6 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
     });
   }
 
-  void _changeSorting(String newSortBy) {
-    setState(() {
-      _sortBy = newSortBy;
-      _sortBuses(_buses);
-    });
-  }
 
   String _formatDuration(int minutes) {
     final hours = minutes ~/ 60;
@@ -160,16 +160,26 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
     return '${hours}h ${mins}m';
   }
 
-  Color _getBusTypeColor(String busType) {
-    switch (busType.toLowerCase()) {
-      case 'luxury':
-        return Colors.purple;
-      case 'semi-luxury':
-        return Colors.blue;
-      case 'ac':
-        return Colors.green;
-      default:
-        return Colors.grey;
+  Future<void> _launchWebsite() async {
+    try {
+      final Uri url = Uri.parse('https://gwtechnologiez.com');
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        // Fallback: try launching without mode specification
+        await launchUrl(url);
+      }
+    } catch (e) {
+      print('Error launching website: $e');
+      // Show a snackbar or dialog to inform the user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open website. Please try again later.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -188,238 +198,262 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
-        child: SizedBox(
-          height: screenHeight - MediaQuery.of(context).padding.top,
-          width: screenWidth,
-          child: Stack(
-            children: [
-              // Yellow background header
-              Container(
-                height: backgroundHeight,
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
-                  ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(25),
-                    bottomRight: Radius.circular(25),
-                  ),
-                ),
-              ),
-
-              // Back button
-              Positioned(
-                top: isSmallScreen ? 15 : 20,
-                left: 20,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 10,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.arrow_back,
-                      color: Colors.black,
-                      size: isSmallScreen ? 20 : 24,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Header content
-              Positioned(
-                top: isLandscape ? 15 : isSmallScreen ? 60 : 80,
-                left: horizontalPadding,
-                right: horizontalPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: screenHeight - MediaQuery.of(context).padding.top,
+                width: screenWidth,
+                child: Stack(
                   children: [
-                    Text(
-                      'Available Buses',
-                      style: TextStyle(
-                        fontSize: isTablet ? 28 : isSmallScreen ? 22 : 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                    // Yellow background header
+                    Container(
+                      height: backgroundHeight,
+                      width: double.infinity,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                        ),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(25),
+                          bottomRight: Radius.circular(25),
+                        ),
                       ),
                     ),
-                    SizedBox(height: isSmallScreen ? 4 : 8),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 12 : 16,
-                        vertical: isSmallScreen ? 6 : 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.trip_origin,
-                            size: isSmallScreen ? 14 : 16,
-                            color: Colors.black54,
+
+                    // Back button
+                    Positioned(
+                      top: isSmallScreen ? 15 : 20,
+                      left: 20,
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 10,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
                           ),
-                          SizedBox(width: isSmallScreen ? 6 : 8),
+                          child: Icon(
+                            Icons.arrow_back,
+                            color: Colors.black,
+                            size: isSmallScreen ? 20 : 24,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Header content
+                    Positioned(
+                      top: isLandscape ? 15 : isSmallScreen ? 60 : 80,
+                      left: horizontalPadding,
+                      right: horizontalPadding,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            widget.fromLocation,
+                            'Available Buses',
                             style: TextStyle(
-                              fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
-                              fontWeight: FontWeight.w600,
+                              fontSize: isTablet ? 28 : isSmallScreen ? 22 : 26,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
-                          SizedBox(width: isSmallScreen ? 8 : 12),
-                          Icon(
-                            Icons.arrow_forward,
-                            size: isSmallScreen ? 12 : 14,
-                            color: Colors.black54,
-                          ),
-                          SizedBox(width: isSmallScreen ? 8 : 12),
-                          Icon(
-                            Icons.flag_outlined,
-                            size: isSmallScreen ? 14 : 16,
-                            color: Colors.black54,
-                          ),
-                          SizedBox(width: isSmallScreen ? 6 : 8),
-                          Text(
-                            widget.toLocation,
-                            style: TextStyle(
-                              fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
-                              fontWeight: FontWeight.w600,
+                          SizedBox(height: isSmallScreen ? 4 : 8),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isSmallScreen ? 12 : 16,
+                              vertical: isSmallScreen ? 6 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.trip_origin,
+                                  size: isSmallScreen ? 14 : 16,
+                                  color: Colors.black54,
+                                ),
+                                SizedBox(width: isSmallScreen ? 6 : 8),
+                                Text(
+                                  widget.fromLocation,
+                                  style: TextStyle(
+                                    fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 12),
+                                Icon(
+                                  Icons.arrow_forward,
+                                  size: isSmallScreen ? 12 : 14,
+                                  color: Colors.black54,
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 12),
+                                Icon(
+                                  Icons.flag_outlined,
+                                  size: isSmallScreen ? 14 : 16,
+                                  color: Colors.black54,
+                                ),
+                                SizedBox(width: isSmallScreen ? 6 : 8),
+                                Text(
+                                  widget.toLocation,
+                                  style: TextStyle(
+                                    fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
+
+                    // Main content area
+                    Positioned(
+                      top: backgroundHeight - 20,
+                      left: horizontalPadding,
+                      right: horizontalPadding,
+                      bottom: 0,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(25),
+                            topRight: Radius.circular(25),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 20,
+                              offset: Offset(0, -5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Results
+                            Expanded(
+                              child: _isLoading
+                                  ? const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFFFC107),
+                                ),
+                              )
+                                  : _buses.isEmpty
+                                  ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.directions_bus_outlined,
+                                      size: isTablet ? 80 : 60,
+                                      color: Colors.grey[400],
+                                    ),
+                                    SizedBox(height: isSmallScreen ? 12 : 16),
+                                    Text(
+                                      'No online buses found',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 20 : 18,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    SizedBox(height: isSmallScreen ? 6 : 8),
+                                    Text(
+                                      'Try different locations or check back later',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 16 : 14,
+                                        color: Colors.grey[500],
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              )
+                                  : ListView.builder(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isSmallScreen ? 12 : 16,
+                                  vertical: isSmallScreen ? 6 : 8,
+                                ),
+                                itemCount: _buses.length,
+                                itemBuilder: (context, index) {
+                                  final bus = _buses[index];
+                                  return _buildBusCard(bus, isSmallScreen, isTablet);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-
-              // Main content area
-              Positioned(
-                top: backgroundHeight - 20,
-                left: horizontalPadding,
-                right: horizontalPadding,
-                bottom: 0,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(25),
-                      topRight: Radius.circular(25),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 20,
-                        offset: Offset(0, -5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Results
-                      Expanded(
-                        child: _isLoading
-                            ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFFFFC107),
-                          ),
-                        )
-                            : _buses.isEmpty
-                            ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.directions_bus_outlined,
-                                size: isTablet ? 80 : 60,
-                                color: Colors.grey[400],
-                              ),
-                              SizedBox(height: isSmallScreen ? 12 : 16),
-                              Text(
-                                'No buses found',
-                                style: TextStyle(
-                                  fontSize: isTablet ? 20 : 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              SizedBox(height: isSmallScreen ? 6 : 8),
-                              Text(
-                                'Try different locations or check back later',
-                                style: TextStyle(
-                                  fontSize: isTablet ? 16 : 14,
-                                  color: Colors.grey[500],
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
-                            : ListView.builder(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isSmallScreen ? 12 : 16,
-                            vertical: isSmallScreen ? 6 : 8,
-                          ),
-                          itemCount: _buses.length,
-                          itemBuilder: (context, index) {
-                            final bus = _buses[index];
-                            return _buildBusCard(bus, isSmallScreen, isTablet);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
+            ),
+            
+            // Footer Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.2),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
               ),
-            ],
-          ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Powered by ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _launchWebsite,
+                    child: Text(
+                      'GW Technology',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue[600],
+                        fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildSortChip(String value, String label, bool isSmallScreen, bool isTablet) {
-    final isSelected = _sortBy == value;
-    return GestureDetector(
-      onTap: () => _changeSorting(value),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 12 : 16,
-          vertical: isSmallScreen ? 6 : 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFC107) : Colors.grey[100],
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.black : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: isTablet ? 14 : isSmallScreen ? 12 : 13,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.black : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildBusCard(Map<String, dynamic> bus, bool isSmallScreen, bool isTablet) {
     return Container(
@@ -442,28 +476,68 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Bus number, route name and operator
-            Text(
-              bus['busNumber'],
-              style: TextStyle(
-                fontSize: isTablet ? 20 : isSmallScreen ? 16 : 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            Text(
-              bus['route'],
-              style: TextStyle(
-                fontSize: isTablet ? 20 : isSmallScreen ? 16 : 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            Text(
-              bus['operatorName'],
-              style: TextStyle(
-                fontSize: isTablet ? 14 : isSmallScreen ? 12 : 13,
-                color: Colors.grey[600],
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        bus['busNumber'],
+                        style: TextStyle(
+                          fontSize: isTablet ? 20 : isSmallScreen ? 16 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        bus['route'],
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : isSmallScreen ? 12 : 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                      Text(
+                        bus['operatorName'],
+                        style: TextStyle(
+                          fontSize: isTablet ? 12 : isSmallScreen ? 10 : 11,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Online',
+                        style: TextStyle(
+                          fontSize: isTablet ? 10 : 9,
+                          color: Colors.green[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
 
             SizedBox(height: isSmallScreen ? 12 : 16),
@@ -558,6 +632,21 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
             // Price and booking section
             Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Rs. ${bus['price']}',
+                    style: TextStyle(
+                      fontSize: isTablet ? 16 : isSmallScreen ? 14 : 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[800],
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 ElevatedButton(
                   onPressed: () {
@@ -568,12 +657,6 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                         builder: (context) => BusBeeTrackingScreen(
                           busInfo: bus,
                         ),
-                      ),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Show location of ${bus['busNumber']}...'),
-                        backgroundColor: const Color(0xFFFFC107),
                       ),
                     );
                   },
@@ -590,19 +673,61 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    'Navigate',
-                    style: TextStyle(
-                      fontSize: isTablet ? 14 : isSmallScreen ? 12 : 13,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: isSmallScreen ? 14 : 16,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Track',
+                        style: TextStyle(
+                          fontSize: isTablet ? 14 : isSmallScreen ? 12 : 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
 
-            // Amenities (if available)
-
+            // Current location info
+            if (bus['currentLocation'] != 'Location not available')
+              Padding(
+                padding: EdgeInsets.only(top: isSmallScreen ? 8 : 12),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: Colors.blue[600],
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Current: ${bus['currentLocation']}',
+                          style: TextStyle(
+                            fontSize: isTablet ? 12 : 11,
+                            color: Colors.blue[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

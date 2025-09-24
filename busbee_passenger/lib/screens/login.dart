@@ -3,6 +3,7 @@ import 'package:busbee_passenger/screens/userDashBoard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BusBeeLoginScreen extends StatefulWidget {
   const BusBeeLoginScreen({Key? key}) : super(key: key);
@@ -90,7 +91,7 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const BusBeeMenuScreen()),
-            (_) => false,
+        (_) => false,
       );
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
@@ -119,6 +120,27 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
     }
   }
 
+  Future<void> _launchWebsite() async {
+    try {
+      final Uri url = Uri.parse('https://gwtechnologiez.com');
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url);
+      }
+    } catch (e) {
+      // Show a snackbar to inform the user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open website. Please try again later.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   String? _validatePhoneField(String? v) {
     final c = _canonicalizeSriLankaPhone(v?.trim() ?? '');
     return c == null ? 'Enter a valid phone number (e.g., 0771234567)' : null;
@@ -140,8 +162,11 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
 
     // Responsive dimensions
     final backgroundHeight = isLandscape ? screenHeight * 0.4 : screenHeight * 0.55;
-    final cardHeight = isLandscape ? screenHeight * 0.85 :
-    isSmallScreen ? screenHeight * 0.75 : screenHeight * 0.6;
+    final cardHeight = isLandscape
+        ? screenHeight * 0.85
+        : isSmallScreen
+            ? screenHeight * 0.75
+            : screenHeight * 0.6;
     final horizontalPadding = isTablet ? screenWidth * 0.15 : 30.0;
     final cardPadding = isTablet ? 50.0 : isSmallScreen ? 25.0 : 40.0;
 
@@ -150,7 +175,9 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: screenHeight - MediaQuery.of(context).padding.top),
+            constraints: BoxConstraints(
+              minHeight: screenHeight - MediaQuery.of(context).padding.top,
+            ),
             child: Stack(
               children: [
                 // Yellow background curved section
@@ -192,12 +219,15 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                     top: isSmallScreen ? 30 : 50,
                     right: 30,
                     child: Column(
-                      children: List.generate(3, (index) => Container(
-                        width: 25,
-                        height: 3,
-                        color: Colors.black,
-                        margin: EdgeInsets.only(bottom: index < 2 ? 4 : 0),
-                      )),
+                      children: List.generate(
+                        3,
+                        (index) => Container(
+                          width: 25,
+                          height: 3,
+                          color: Colors.black,
+                          margin: EdgeInsets.only(bottom: index < 2 ? 4 : 0),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -205,10 +235,9 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                 // Main login card - centered
                 Center(
                   child: Container(
-
                     width: isTablet ? 500 : screenWidth - (horizontalPadding * 2),
                     margin: EdgeInsets.only(
-                      top: isLandscape ? 20 : backgroundHeight - backgroundHeight/2,
+                      top: isLandscape ? 20 : backgroundHeight - backgroundHeight / 2,
                       bottom: 20,
                     ),
                     constraints: BoxConstraints(
@@ -329,7 +358,8 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                                       color: Colors.black54,
                                       size: isTablet ? 24 : 20,
                                     ),
-                                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                                    onPressed: () =>
+                                        setState(() => _isPasswordVisible = !_isPasswordVisible),
                                   ),
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.symmetric(
@@ -361,20 +391,20 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                                 ),
                                 child: _isLoading
                                     ? SizedBox(
-                                  height: isSmallScreen ? 18 : 20,
-                                  width: isSmallScreen ? 18 : 20,
-                                  child: const CircularProgressIndicator(
-                                    color: Colors.black,
-                                    strokeWidth: 2,
-                                  ),
-                                )
+                                        height: isSmallScreen ? 18 : 20,
+                                        width: isSmallScreen ? 18 : 20,
+                                        child: const CircularProgressIndicator(
+                                          color: Colors.black,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
                                     : Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontSize: isTablet ? 20 : 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                                        'Login',
+                                        style: TextStyle(
+                                          fontSize: isTablet ? 20 : 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
                             ),
 
@@ -423,6 +453,54 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+
+      // 🔻 Footer pinned to bottom of the screen
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                spreadRadius: 2,
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Powered by ',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              GestureDetector(
+                onTap: _launchWebsite,
+                child: Text(
+                  'GW Technology',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
