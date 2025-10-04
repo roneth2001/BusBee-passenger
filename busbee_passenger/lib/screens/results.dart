@@ -214,7 +214,7 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                          colors: [Color.fromARGB(255, 247, 246, 246), Color.fromARGB(255, 255, 0, 0)],
                         ),
                         borderRadius: BorderRadius.only(
                           bottomLeft: Radius.circular(25),
@@ -428,7 +428,7 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                   Text(
                     'Powered by ',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 10,
                       color: Colors.grey[600],
                       fontWeight: FontWeight.w400,
                     ),
@@ -436,9 +436,9 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                   GestureDetector(
                     onTap: _launchWebsite,
                     child: Text(
-                      'GW Technology',
+                      'GW Technology (PVT) LTD',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 10,
                         color: Colors.blue[600],
                         fontWeight: FontWeight.bold,
                         decoration: TextDecoration.underline,

@@ -99,7 +99,7 @@ class BusBeeMenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFC107),
+      backgroundColor: const Color.fromARGB(255, 252, 52, 38),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(30),
@@ -297,7 +297,7 @@ class BusBeeMenuScreen extends StatelessWidget {
               Text(
                 'Powered by ',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 10,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
                 ),
@@ -305,9 +305,9 @@ class BusBeeMenuScreen extends StatelessWidget {
               GestureDetector(
                 onTap: _launchWebsite,
                 child: Text(
-                  'GW Technology',
+                  'GW Technology (PVT) LTD',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 10,
                     color: Colors.blue[600],
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,

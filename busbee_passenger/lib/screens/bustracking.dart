@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 
 class BusBeeTrackingScreen extends StatefulWidget {
@@ -21,10 +22,12 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
 
   GoogleMapController? _mapController;
   StreamSubscription<DatabaseEvent>? _busSub;
+  StreamSubscription<Position>? _locationSub;
   Timer? _refreshTimer;
 
   // Live values
   LatLng? _busLocation;           // null until first snapshot
+  LatLng? _userLocation;          // user's current location
   double _busSpeed = 0.0;         // km/h
   String _busStatus = 'On Route'; // "On Route" | "At Stop" | "Delayed" (optional)
   int? _nextStopEtaMin;           // minutes to next stop (optional)
@@ -34,16 +37,100 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
   bool _isOnline = false;         // bus online status
 
   Set<Marker> _markers = <Marker>{};
+  BitmapDescriptor? _busIcon;     // Custom bus icon
+  BitmapDescriptor? _userIcon;    // Custom user icon
 
   @override
   void initState() {
     super.initState();
+    _loadCustomIcons();
+    _getUserLocation();
     _listenToBusDoc();
     _startPeriodicRefresh();
   }
 
+  Future<void> _loadCustomIcons() async {
+    try {
+      // Load custom bus icon from assets
+      _busIcon = await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/icons/bus_icon_on_map.png',  // Make sure this file exists
+      );
+    } catch (e) {
+      debugPrint('[BusBee] Could not load custom bus icon: $e');
+    }
+
+    try {
+      // Load custom user icon from assets
+      _userIcon = await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(40, 40)),
+        'assets/icons/user_icon.png',  // Make sure this file exists
+      );
+    } catch (e) {
+      debugPrint('[BusBee] Could not load custom user icon: $e');
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _getUserLocation() async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('[BusBee] Location services are disabled');
+        return;
+      }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('[BusBee] Location permissions denied');
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('[BusBee] Location permissions permanently denied');
+        return;
+      }
+
+      // Get current location
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      if (mounted) {
+        setState(() {
+          _userLocation = LatLng(position.latitude, position.longitude);
+          _updateMarkers();
+        });
+      }
+
+      // Listen to location updates
+      _locationSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10, // Update every 10 meters
+        ),
+      ).listen((Position position) {
+        if (mounted) {
+          setState(() {
+            _userLocation = LatLng(position.latitude, position.longitude);
+            _updateMarkers();
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('[BusBee] Error getting user location: $e');
+    }
+  }
+
   void _startPeriodicRefresh() {
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    // Refresh every 15 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       if (mounted) {
         _refreshBusData();
       }
@@ -122,21 +209,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
     if (!mounted) return;
     setState(() {
       _busLocation = newPos;
-      _markers = {
-        Marker(
-          markerId: const MarkerId('bus'),
-          position: newPos,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            _isOnline ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueRed
-          ),
-          infoWindow: InfoWindow(
-            title: widget.busInfo['busNumber'] ?? data['busNumber'] ?? 'Bus',
-            snippet: _busSpeed > 0 
-                ? 'Speed: ${_busSpeed.toStringAsFixed(0)} km/h ${_isOnline ? "• Online" : "• Offline"}'
-                : (_isOnline ? 'Online' : 'Offline'),
-          ),
-        ),
-      };
+      _updateMarkers();
     });
 
     // keep camera on the bus (only if it's a significant location change)
@@ -147,9 +220,52 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
     }
   }
 
+  void _updateMarkers() {
+    Set<Marker> newMarkers = {};
+
+    // Add bus marker
+    if (_busLocation != null) {
+      newMarkers.add(
+        Marker(
+          markerId: const MarkerId('bus'),
+          position: _busLocation!,
+          icon: _busIcon ?? BitmapDescriptor.defaultMarkerWithHue(
+            _isOnline ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueRed
+          ),
+          infoWindow: InfoWindow(
+            title: widget.busInfo['busNumber'] ?? 'Bus',
+            snippet: _busSpeed > 0 
+                ? 'Speed: ${_busSpeed.toStringAsFixed(0)} km/h ${_isOnline ? "• Online" : "• Offline"}'
+                : (_isOnline ? 'Online' : 'Offline'),
+          ),
+        ),
+      );
+    }
+
+    // Add user marker
+    if (_userLocation != null) {
+      newMarkers.add(
+        Marker(
+          markerId: const MarkerId('user'),
+          position: _userLocation!,
+          icon: _userIcon ?? BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueBlue
+          ),
+          infoWindow: const InfoWindow(
+            title: 'Your Location',
+            snippet: 'You are here',
+          ),
+        ),
+      );
+    }
+
+    _markers = newMarkers;
+  }
+
   @override
   void dispose() {
     _busSub?.cancel();
+    _locationSub?.cancel();
     _refreshTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
@@ -178,10 +294,10 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     // center instantly on first build if we already have a location
-    final target = _busLocation ?? const LatLng(7.8731, 80.7718); // Sri Lanka default
+    final target = _busLocation ?? _userLocation ?? const LatLng(7.8731, 80.7718); // Sri Lanka default
     controller.moveCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: target, zoom: _busLocation == null ? 6 : 14),
+        CameraPosition(target: target, zoom: _busLocation == null && _userLocation == null ? 6 : 14),
       ),
     );
   }
@@ -201,7 +317,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
         await launchUrl(uri);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Can t start a call to $phone")),
+          SnackBar(content: Text("Can't start a call to $phone")),
         );
       }
     } catch (_) {
@@ -209,6 +325,18 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
         SnackBar(content: Text('Failed to call $phone')),
       );
     }
+  }
+
+  void _centerOnUser() {
+    if (_userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User location not available')),
+      );
+      return;
+    }
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(_userLocation!, 16),
+    );
   }
 
   @override
@@ -299,29 +427,48 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: _busLocation == null
-                      ? const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text('Loading bus location...'),
-                            ],
+                  child: Stack(
+                    children: [
+                      _busLocation == null && _userLocation == null
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text('Loading location...'),
+                                ],
+                              ),
+                            )
+                          : GoogleMap(
+                              onMapCreated: _onMapCreated,
+                              initialCameraPosition: CameraPosition(
+                                target: _busLocation ?? _userLocation ?? const LatLng(7.8731, 80.7718),
+                                zoom: 14,
+                              ),
+                              markers: _markers,
+                              polylines: const {},
+                              mapType: MapType.normal,
+                              myLocationButtonEnabled: false,
+                              zoomControlsEnabled: true,
+                              compassEnabled: true,
+                              trafficEnabled: true,
+                              buildingsEnabled: true,
+                              mapToolbarEnabled: false,
+                            ),
+                      // Floating button to center on user
+                      if (_userLocation != null)
+                        Positioned(
+                          right: 16,
+                          top: 16,
+                          child: FloatingActionButton(
+                            mini: true,
+                            backgroundColor: Colors.white,
+                            onPressed: _centerOnUser,
+                            child: const Icon(Icons.my_location, color: Colors.blue),
                           ),
-                        )
-                      : GoogleMap(
-                    onMapCreated: _onMapCreated,
-                    initialCameraPosition: CameraPosition(target: _busLocation!, zoom: 14),
-                    markers: _markers,
-                    polylines: const {}, // no routes
-                    mapType: MapType.normal,
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled: true,
-                    compassEnabled: true,
-                    trafficEnabled: true,
-                    buildingsEnabled: true,
-                    mapToolbarEnabled: false,
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -401,7 +548,7 @@ class _BusBeeTrackingScreenState extends State<BusBeeTrackingScreen> {
                               : () => _mapController?.animateCamera(
                             CameraUpdate.newLatLngZoom(_busLocation!, 16),
                           ),
-                          icon: Icon(Icons.my_location, size: isSmall ? 16 : 18),
+                          icon: Icon(Icons.directions_bus, size: isSmall ? 16 : 18),
                           label: Text(
                             'Center Bus',
                             style: TextStyle(fontSize: isTablet ? 14 : isSmall ? 12 : 13, fontWeight: FontWeight.w600),

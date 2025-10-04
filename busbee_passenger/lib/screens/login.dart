@@ -188,7 +188,7 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                      colors: [Color.fromARGB(255, 255, 0, 0), Color.fromARGB(255, 255, 255, 255)],
                     ),
                     borderRadius: BorderRadius.only(
                       bottomLeft: Radius.circular(20),
@@ -378,7 +378,7 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _signIn,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFFC107),
+                                  backgroundColor: const Color.fromARGB(255, 255, 0, 0),
                                   foregroundColor: Colors.black,
                                   padding: EdgeInsets.symmetric(
                                     vertical: isSmallScreen ? 12 : 15,
@@ -434,7 +434,7 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
                                   child: Text(
                                     'Sign Up',
                                     style: TextStyle(
-                                      color: const Color(0xFFFFC107),
+                                      color: const Color.fromARGB(255, 252, 0, 0),
                                       fontSize: isTablet ? 18 : 16,
                                       fontWeight: FontWeight.bold,
                                       decoration: TextDecoration.underline,
@@ -483,7 +483,7 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
               Text(
                 'Powered by ',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 10,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
                 ),
@@ -491,9 +491,9 @@ class _BusBeeLoginScreenState extends State<BusBeeLoginScreen> {
               GestureDetector(
                 onTap: _launchWebsite,
                 child: Text(
-                  'GW Technology',
+                  'GW Technology (PVT) LTD',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 10,
                     color: Colors.blue[600],
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,

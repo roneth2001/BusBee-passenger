@@ -370,7 +370,7 @@ class _BusBeeRouteSearchScreenState extends State<BusBeeRouteSearchScreen> {
                 child: Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFFFFD54F), Color(0xFFFFC107)],
+                      colors: [Color.fromARGB(255, 255, 255, 255), Color.fromARGB(255, 255, 2, 2)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
@@ -498,7 +498,7 @@ class _BusBeeRouteSearchScreenState extends State<BusBeeRouteSearchScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFFC107),
+                                    color: const Color.fromARGB(255, 255, 0, 0),
                                     border: Border.all(color: Colors.black, width: 2),
                                     borderRadius: BorderRadius.circular(30),
                                   ),
@@ -529,8 +529,8 @@ class _BusBeeRouteSearchScreenState extends State<BusBeeRouteSearchScreen> {
                             child: ElevatedButton(
                               onPressed: _isSearching ? null : _findBuses,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFFC107),
-                                foregroundColor: Colors.black,
+                                backgroundColor: const Color.fromARGB(255, 255, 2, 2),
+                                foregroundColor: const Color.fromARGB(255, 255, 255, 255),
                                 padding: const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(25),
@@ -592,7 +592,7 @@ class _BusBeeRouteSearchScreenState extends State<BusBeeRouteSearchScreen> {
               Text(
                 'Powered by ',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 10,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
                 ),
@@ -600,9 +600,9 @@ class _BusBeeRouteSearchScreenState extends State<BusBeeRouteSearchScreen> {
               GestureDetector(
                 onTap: _launchWebsite,
                 child: Text(
-                  'GW Technology',
+                  'GW Technology(PVT) LTD',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 10,
                     color: Colors.blue[600],
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,

@@ -37,11 +37,11 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               child: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.centerRight,
-                    end: Alignment.centerLeft,
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                     colors: [
-                      Color(0xFFE8B20A),
-                      Color(0xFFF4D98E),
+                      Color.fromARGB(255, 255, 30, 0),
+                      Color.fromARGB(255, 255, 255, 255),
                     ],
                   ),
                   borderRadius: BorderRadius.only(
@@ -156,10 +156,10 @@ class BusBeeWelcomeScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (context) => const BusBeeLoginScreen()),
                   );
                 },
-                backgroundColor: const Color(0xFFFFC107),
+                backgroundColor: const Color.fromARGB(255, 255, 0, 0),
                 child: const Icon(
                   Icons.arrow_forward,
-                  color: Colors.black,
+                  color: Color.fromARGB(255, 255, 255, 255),
                   size: 30,
                 ),
               ),
@@ -194,7 +194,7 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               Text(
                 'Powered by ',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 10,
                   color: Colors.grey[600],
                   fontWeight: FontWeight.w400,
                 ),
@@ -202,9 +202,9 @@ class BusBeeWelcomeScreen extends StatelessWidget {
               GestureDetector(
                 onTap: _launchWebsite,
                 child: Text(
-                  'GW Technology',
+                  'GW Technology (PVT) LTD',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 10,
                     color: Colors.blue[600],
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,
