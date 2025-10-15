@@ -35,6 +35,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Read key from env var or gradle.properties
+        val mapsKey: String = System.getenv("MAPS_API_KEY")
+            ?: (project.findProperty("MAPS_API_KEY") as String? ?: "")
+
+        // ✅ Kotlin DSL: mutate the placeholders map
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     buildTypes {

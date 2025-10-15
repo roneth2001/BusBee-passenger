@@ -1,3 +1,4 @@
+import 'package:busbee_passenger/screens/bustracking.dart';
 import 'package:busbee_passenger/screens/routeSearch.dart';
 import 'package:busbee_passenger/screens/welcomePage.dart';
 import 'package:flutter/material.dart';
@@ -5,14 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// If you use an AuthGate as home, you can just signOut() and not navigate.
-// If you want to navigate explicitly after logout, import your login screen:
-// <-- change to your actual path/file if needed
-
 class BusBeeMenuScreen extends StatelessWidget {
   const BusBeeMenuScreen({Key? key}) : super(key: key);
 
-  /// Reads the current user's Firestore doc and returns a stream of their full name.
+  /// Get first name from fullName in passengers collection
   Stream<String?> _userNameStream() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return const Stream<String?>.empty();
@@ -29,59 +26,28 @@ class BusBeeMenuScreen extends StatelessWidget {
     });
   }
 
-  /// Best-effort greeting name: Firestore fullName → displayName → phone/email → "there"
-  Widget _greeting() {
-    final user = FirebaseAuth.instance.currentUser;
+  /// Get count of favorite buses
+  Stream<int> _favoritesCountStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value(0);
 
-    return StreamBuilder<String?>(
-      stream: _userNameStream(),
-      builder: (context, snapshot) {
-        String fallback = 'there';
-
-        // Try displayName
-        final dn = user?.displayName?.trim();
-        if (dn != null && dn.isNotEmpty) fallback = dn;
-
-        // Try phone
-        final phone = user?.phoneNumber?.trim();
-        if (phone != null && phone.isNotEmpty) fallback = phone;
-
-        // Try email
-        final email = user?.email?.trim();
-        if (email != null && email.isNotEmpty) fallback = email;
-
-        // Prefer Firestore name if available
-        final nameFromFirestore = snapshot.data;
-        final greetingName = (nameFromFirestore != null && nameFromFirestore.isNotEmpty)
-            ? nameFromFirestore
-            : fallback;
-
-        // Only first name
-        final first = greetingName.split(' ').first;
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Text(
-            'Hi ...',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          );
-        }
-
-        return Text(
-          'Hi $first!',
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        );
-      },
-    );
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
+  /// Navigate to favorites list screen
+  void _showFavoritesList(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const FavoriteBusesScreen(),
+      ),
+    );
+  }
 
   Future<void> _launchWebsite() async {
     try {
@@ -92,7 +58,7 @@ class BusBeeMenuScreen extends StatelessWidget {
         await launchUrl(url);
       }
     } catch (_) {
-      // You can show a snackbar via a passed BuildContext if needed
+      // Handle error silently
     }
   }
 
@@ -108,10 +74,24 @@ class BusBeeMenuScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 40),
 
-              // (You can put an illustration here)
-
-              // 👇 Dynamic greeting from Firestore/Auth
-              _greeting(),
+              // Dynamic greeting with first name
+              StreamBuilder<String?>(
+                stream: _userNameStream(),
+                builder: (context, snapshot) {
+                  final name = snapshot.data;
+                  final greeting = name != null
+                      ? 'Hello, ${name.split(' ').first}!'
+                      : 'Welcome Back!';
+                  return Text(
+                    greeting,
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  );
+                },
+              ),
 
               // Underline
               Container(
@@ -156,34 +136,33 @@ class BusBeeMenuScreen extends StatelessWidget {
                     ),
 
                     _buildMenuItem(
-                      icon: Icons.directions_bus,
-                      text: 'See Your Bus',
+                      icon: Icons.search,
+                      text: 'Find a New Bus',
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const BusBeeRouteSearchScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const BusBeeRouteSearchScreen(),
+                          ),
                         );
                       },
                     ),
                     const SizedBox(height: 20),
 
-                    _buildMenuItem(
-                      icon: Icons.notifications,
-                      text: 'Notifications',
-                      showBadge: true,
-                      onTap: () {
-                        // TODO: Navigate to notifications screen
+                    StreamBuilder<int>(
+                      stream: _favoritesCountStream(),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data ?? 0;
+                        return _buildMenuItem(
+                          icon: Icons.directions_bus,
+                          text: 'My favorite Buses',
+                          showBadge: count > 0,
+                          badgeCount: count,
+                          onTap: () => _showFavoritesList(context),
+                        );
                       },
                     ),
                     const SizedBox(height: 20),
-
-                    _buildMenuItem(
-                      icon: Icons.settings,
-                      text: 'Settings',
-                      onTap: () {
-                        // TODO: Navigate to settings screen
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -196,14 +175,13 @@ class BusBeeMenuScreen extends StatelessWidget {
                   width: 200,
                   child: ElevatedButton(
                     onPressed: () async {
-                      // 1. Sign out
                       await FirebaseAuth.instance.signOut();
-
-                      // 2. Navigate to WelcomePage and clear history
                       if (!context.mounted) return;
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => const BusBeeWelcomeScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const BusBeeWelcomeScreen(),
+                        ),
                         (route) => false,
                       );
                     },
@@ -232,7 +210,10 @@ class BusBeeMenuScreen extends StatelessWidget {
               // BusBee logo
               Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 25,
+                    vertical: 15,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF2C2C2C),
                     borderRadius: BorderRadius.circular(15),
@@ -271,7 +252,7 @@ class BusBeeMenuScreen extends StatelessWidget {
         ),
       ),
 
-      // 🔻 Footer pinned to bottom of the screen
+      // Footer
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
@@ -326,6 +307,7 @@ class BusBeeMenuScreen extends StatelessWidget {
     required String text,
     required VoidCallback onTap,
     bool showBadge = false,
+    int badgeCount = 1,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -341,18 +323,21 @@ class BusBeeMenuScreen extends StatelessWidget {
                     right: 0,
                     top: 0,
                     child: Container(
-                      width: 12,
-                      height: 12,
+                      padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
                         color: Colors.red,
                         shape: BoxShape.circle,
                       ),
-                      child: const Center(
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      child: Center(
                         child: Text(
-                          '1',
-                          style: TextStyle(
+                          badgeCount > 9 ? '9+' : badgeCount.toString(),
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 8,
+                            fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -374,6 +359,309 @@ class BusBeeMenuScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Separate screen to show favorite buses list
+class FavoriteBusesScreen extends StatelessWidget {
+  const FavoriteBusesScreen({Key? key}) : super(key: key);
+
+  Stream<List<Map<String, dynamic>>> _favoriteBusesStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'busId': data['busId'] ?? '',
+          'busNumber': data['busNumber'] ?? 'Unknown',
+          'routeName': data['routeName'] ?? '',
+          'nextStop': data['nextStop'] ?? '',
+          'timestamp': data['timestamp'],
+        };
+      }).toList();
+    });
+  }
+
+  Future<void> _deleteFavorite(BuildContext context, String favoriteId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('favorites')
+          .doc(favoriteId)
+          .delete();
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Removed from favorites'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to remove: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _navigateToTracking(BuildContext context, Map<String, dynamic> busData) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BusBeeTrackingScreen(
+          busInfo: {
+            'id': busData['busId'],
+            'busNumber': busData['busNumber'],
+            'routeName': busData['routeName'],
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const Color.fromARGB(255, 252, 52, 38),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'My Favorite Buses',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _favoriteBusesStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: Color.fromARGB(255, 252, 52, 38),
+              ),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 60,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading favorites',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final favorites = snapshot.data ?? [];
+
+          if (favorites.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.favorite_border,
+                    size: 80,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'No favorite buses yet',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Add buses to track them easily',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BusBeeRouteSearchScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.search),
+                    label: const Text('Find a Bus'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 252, 52, 38),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: favorites.length,
+            itemBuilder: (context, index) {
+              final bus = favorites[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFC107),
+                          Color(0xFFFFD54F),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.directions_bus,
+                      color: Colors.black87,
+                      size: 32,
+                    ),
+                  ),
+                  title: Text(
+                    bus['busNumber'],
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text(
+                        bus['routeName'].isEmpty
+                            ? 'No route info'
+                            : bus['routeName'],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      if (bus['nextStop'].isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Next: ${bus['nextStop']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.location_on,
+                            color: Colors.blue,
+                          ),
+                          onPressed: () => _navigateToTracking(context, bus),
+                          tooltip: 'Track Bus',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
+                          onPressed: () => _deleteFavorite(context, bus['id']),
+                          tooltip: 'Remove',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

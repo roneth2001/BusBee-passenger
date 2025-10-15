@@ -498,13 +498,7 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                           color: Colors.blue[700],
                         ),
                       ),
-                      Text(
-                        bus['operatorName'],
-                        style: TextStyle(
-                          fontSize: isTablet ? 12 : isSmallScreen ? 10 : 11,
-                          color: Colors.grey[600],
-                        ),
-                      ),
+                      
                     ],
                   ),
                 ),
@@ -550,14 +544,6 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        bus['departureTime'],
-                        style: TextStyle(
-                          fontSize: isTablet ? 18 : isSmallScreen ? 14 : 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      Text(
                         bus['fromStop'],
                         style: TextStyle(
                           fontSize: isTablet ? 12 : isSmallScreen ? 10 : 11,
@@ -569,48 +555,11 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                     ],
                   ),
                 ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 8 : 10,
-                          vertical: isSmallScreen ? 2 : 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _formatDuration(bus['duration']),
-                          style: TextStyle(
-                            fontSize: isTablet ? 12 : isSmallScreen ? 10 : 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: isSmallScreen ? 2 : 4),
-                      Container(
-                        height: 1,
-                        width: isSmallScreen ? 60 : 80,
-                        color: Colors.grey[300],
-                      ),
-                    ],
-                  ),
-                ),
+                
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        bus['arrivalTime'],
-                        style: TextStyle(
-                          fontSize: isTablet ? 18 : isSmallScreen ? 14 : 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
                       Text(
                         bus['toStop'],
                         style: TextStyle(
@@ -639,7 +588,7 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'Rs. ${bus['price']}',
+                    'Rs. 0.00',
                     style: TextStyle(
                       fontSize: isTablet ? 16 : isSmallScreen ? 14 : 15,
                       fontWeight: FontWeight.bold,
@@ -693,41 +642,6 @@ class _BusBeeResultsScreenState extends State<BusBeeResultsScreen> {
                 ),
               ],
             ),
-
-            // Current location info
-            if (bus['currentLocation'] != 'Location not available')
-              Padding(
-                padding: EdgeInsets.only(top: isSmallScreen ? 8 : 12),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 16,
-                        color: Colors.blue[600],
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Current: ${bus['currentLocation']}',
-                          style: TextStyle(
-                            fontSize: isTablet ? 12 : 11,
-                            color: Colors.blue[800],
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
